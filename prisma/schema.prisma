@@ -1,0 +1,83 @@
+// =============================================================================
+// Quản lý Nhà trọ / Chung cư mini — Prisma Schema (PostgreSQL / Supabase)
+// -----------------------------------------------------------------------------
+// Prisma 7: chuỗi kết nối KHÔNG còn khai báo trong schema.
+//   - CLI (db push / migrate)  -> prisma.config.ts  -> DIRECT_URL  (port 5432)
+//   - Runtime (Next.js/Vercel) -> src/lib/prisma.ts -> DATABASE_URL (pooler 6543)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoomStatus {
+  AVAILABLE   // Còn trống
+  RENTED      // Đã cho thuê
+  MAINTENANCE // Đang bảo trì
+}
+
+model Building {
+  id          String   @id @default(cuid())
+  /// Tên tòa nhà — duy nhất, dùng làm khóa map khi import Excel
+  name        String   @unique
+  address     String
+  totalFloors Int      @default(1) @map("total_floors")
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  rooms Room[]
+
+  @@map("buildings")
+}
+
+model Room {
+  id         String     @id @default(cuid())
+  buildingId String     @map("building_id")
+  /// Mã phòng (VD: P101, A2-03) — duy nhất trong phạm vi 1 tòa nhà
+  roomNumber String     @map("room_number")
+  floor      Int        @default(1)
+  /// Giá thuê cơ bản (VND / tháng)
+  basePrice  Int        @default(0) @map("base_price")
+  /// Diện tích (m²)
+  area       Float      @default(0)
+  status     RoomStatus @default(AVAILABLE)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  tenants  Tenant[]
+
+  @@unique([buildingId, roomNumber])
+  @@index([buildingId])
+  @@index([status])
+  @@map("rooms")
+}
+
+model Tenant {
+  id               String   @id @default(cuid())
+  roomId           String   @map("room_id")
+  fullName         String   @map("full_name")
+  /// Số CCCD/CMND (12 số) — dữ liệu nhạy cảm, luôn che khi hiển thị
+  idCard           String   @unique @map("id_card")
+  /// Số điện thoại (10 số) — dữ liệu nhạy cảm, luôn che khi hiển thị
+  phone            String
+  homeTown         String?  @map("home_town")
+  startDate        DateTime  @map("start_date") @db.Date
+  /// Ngày kết thúc hợp đồng thuê (tùy chọn / có thời hạn)
+  endDate          DateTime? @map("end_date") @db.Date
+  isContractHolder Boolean   @default(false) @map("is_contract_holder")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  @@index([roomId])
+  @@index([phone])
+  @@map("tenants")
+}
